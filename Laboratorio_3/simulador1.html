@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis de Ubicación de Polos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.18.0/plotly.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .controls {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 2px solid #e9ecef;
+        }
+        .control-group {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        label {
+            font-weight: bold;
+            min-width: 120px;
+            color: #495057;
+        }
+        input[type="range"] {
+            flex: 1;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        .value-display {
+            min-width: 80px;
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+        .plots {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .plot-container {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .analysis {
+            background: #e8f4fd;
+            padding: 25px;
+            border-radius: 12px;
+            border-left: 5px solid #667eea;
+        }
+        .damping-type {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .overdamped { background-color: #d4edda; color: #155724; }
+        .critically-damped { background-color: #fff3cd; color: #856404; }
+        .underdamped { background-color: #f8d7da; color: #721c24; }
+        .parameters {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .param-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .param-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .param-value {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Análisis de Ubicación de Polos con Ganancia K</h1>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="kGain">Ganancia K:</label>
+                <input type="range" id="kGain" min="0.1" max="10" step="0.1" value="1">
+                <span class="value-display" id="kValue">1.0</span>
+            </div>
+            <div class="control-group">
+                <label>Sistema simplificado de 2do orden para análisis</label>
+            </div>
+        </div>
+
+        <div class="plots">
+            <div class="plot-container">
+                <div id="polePlot"></div>
+            </div>
+            <div class="plot-container">
+                <div id="responsePlot"></div>
+            </div>
+        </div>
+
+        <div class="analysis">
+            <div id="dampingType" class="damping-type"></div>
+            <div class="parameters">
+                <div class="param-box">
+                    <div class="param-label">Factor de Amortiguamiento</div>
+                    <div class="param-value" id="zetaValue">-</div>
+                </div>
+                <div class="param-box">
+                    <div class="param-label">Frecuencia Natural</div>
+                    <div class="param-value" id="wnValue">-</div>
+                </div>
+                <div class="param-box">
+                    <div class="param-label">Polos Dominantes</div>
+                    <div class="param-value" id="polesValue">-</div>
+                </div>
+                <div class="param-box">
+                    <div class="param-label">Tiempo de Establecimiento</div>
+                    <div class="param-value" id="settlingTime">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuración inicial
+        let currentK = 1.0;
+
+        // Referencias a elementos DOM
+        const kSlider = document.getElementById('kGain');
+        const kValueDisplay = document.getElementById('kValue');
+        const dampingTypeDisplay = document.getElementById('dampingType');
+        const zetaDisplay = document.getElementById('zetaValue');
+        const wnDisplay = document.getElementById('wnValue');
+        const polesDisplay = document.getElementById('polesValue');
+        const settlingTimeDisplay = document.getElementById('settlingTime');
+
+        // Para este análisis, simplificaremos a un sistema de segundo orden característico
+        // donde la ecuación característica es: s² + 2ζωn*s + ωn² + K = 0
+        
+        function calculateSystemParameters(K) {
+            // Sistema simplificado: s² + 2s + (1 + K) = 0
+            // Comparando con s² + 2ζωn*s + ωn²
+            const wn = Math.sqrt(1 + K);
+            const zeta = 1 / wn;
+            
+            // Cálculo de polos
+            const discriminant = zeta * zeta - 1;
+            let pole1, pole2;
+            
+            if (discriminant > 0) {
+                // Sobreamortiguado
+                const sqrt_disc = Math.sqrt(discriminant);
+                pole1 = -zeta * wn + wn * sqrt_disc;
+                pole2 = -zeta * wn - wn * sqrt_disc;
+            } else if (discriminant === 0) {
+                // Críticamente amortiguado
+                pole1 = pole2 = -zeta * wn;
+            } else {
+                // Subamortiguado
+                const wd = wn * Math.sqrt(1 - zeta * zeta);
+                pole1 = { real: -zeta * wn, imag: wd };
+                pole2 = { real: -zeta * wn, imag: -wd };
+            }
+            
+            return { wn, zeta, pole1, pole2, discriminant };
+        }
+
+        function updateDisplay() {
+            const params = calculateSystemParameters(currentK);
+            const { wn, zeta, pole1, pole2, discriminant } = params;
+            
+            // Actualizar valores numéricos
+            zetaDisplay.textContent = zeta.toFixed(3);
+            wnDisplay.textContent = wn.toFixed(3) + ' rad/s';
+            
+            // Determinar tipo de amortiguamiento
+            let dampingClass, dampingText;
+            if (zeta > 1) {
+                dampingClass = 'overdamped';
+                dampingText = '📈 SOBREAMORTIGUADO (ζ > 1)';
+                polesDisplay.textContent = `${pole1.toFixed(3)}, ${pole2.toFixed(3)}`;
+            } else if (Math.abs(zeta - 1) < 0.001) {
+                dampingClass = 'critically-damped';
+                dampingText = '⚡ CRÍTICAMENTE AMORTIGUADO (ζ = 1)';
+                polesDisplay.textContent = `${pole1.toFixed(3)} (doble)`;
+            } else {
+                dampingClass = 'underdamped';
+                dampingText = '🌊 SUBAMORTIGUADO (ζ < 1)';
+                polesDisplay.textContent = `${pole1.real.toFixed(3)} ± j${Math.abs(pole1.imag).toFixed(3)}`;
+            }
+            
+            dampingTypeDisplay.className = `damping-type ${dampingClass}`;
+            dampingTypeDisplay.textContent = dampingText;
+            
+            // Tiempo de establecimiento (aproximado)
+            const ts = 4 / (zeta * wn);
+            settlingTimeDisplay.textContent = ts.toFixed(2) + ' s';
+            
+            // Actualizar gráficos
+            updatePolePlot(params);
+            updateResponsePlot(params);
+        }
+
+        function updatePolePlot(params) {
+            const { pole1, pole2, discriminant } = params;
+            
+            let poleData;
+            if (discriminant >= 0) {
+                // Polos reales
+                poleData = [{
+                    x: [pole1, pole2],
+                    y: [0, 0],
+                    mode: 'markers',
+                    marker: {
+                        size: 12,
+                        color: 'red',
+                        symbol: 'x'
+                    },
+                    name: 'Polos',
+                    type: 'scatter'
+                }];
+            } else {
+                // Polos complejos
+                poleData = [{
+                    x: [pole1.real, pole2.real],
+                    y: [pole1.imag, pole2.imag],
+                    mode: 'markers',
+                    marker: {
+                        size: 12,
+                        color: 'blue',
+                        symbol: 'x'
+                    },
+                    name: 'Polos',
+                    type: 'scatter'
+                }];
+            }
+
+            const layout = {
+                title: 'Ubicación de Polos en el Plano S',
+                xaxis: { 
+                    title: 'Parte Real',
+                    zeroline: true,
+                    zerolinecolor: 'black',
+                    range: [-5, 1]
+                },
+                yaxis: { 
+                    title: 'Parte Imaginaria',
+                    zeroline: true,
+                    zerolinecolor: 'black',
+                    range: [-3, 3]
+                },
+                showlegend: false,
+                margin: { t: 40, r: 40, b: 40, l: 40 }
+            };
+
+            Plotly.newPlot('polePlot', poleData, layout);
+        }
+
+        function updateResponsePlot(params) {
+            const { wn, zeta } = params;
+            const t = Array.from({length: 200}, (_, i) => i * 0.05);
+            let y;
+
+            if (zeta > 1) {
+                // Sobreamortiguado
+                const s1 = -zeta * wn + wn * Math.sqrt(zeta * zeta - 1);
+                const s2 = -zeta * wn - wn * Math.sqrt(zeta * zeta - 1);
+                const A = -s2 / (s1 - s2);
+                const B = s1 / (s1 - s2);
+                y = t.map(time => 1 - A * Math.exp(s1 * time) - B * Math.exp(s2 * time));
+            } else if (Math.abs(zeta - 1) < 0.001) {
+                // Críticamente amortiguado
+                y = t.map(time => 1 - (1 + wn * time) * Math.exp(-wn * time));
+            } else {
+                // Subamortiguado
+                const wd = wn * Math.sqrt(1 - zeta * zeta);
+                const phi = Math.atan(Math.sqrt(1 - zeta * zeta) / zeta);
+                y = t.map(time => 1 - (1 / Math.sqrt(1 - zeta * zeta)) * Math.exp(-zeta * wn * time) * Math.cos(wd * time + phi));
+            }
+
+            const responseData = [{
+                x: t,
+                y: y,
+                mode: 'lines',
+                line: { color: '#667eea', width: 3 },
+                name: 'Respuesta al Escalón',
+                type: 'scatter'
+            }];
+
+            const layout = {
+                title: 'Respuesta al Escalón Unitario',
+                xaxis: { title: 'Tiempo (s)' },
+                yaxis: { title: 'Amplitud', range: [0, 2] },
+                showlegend: false,
+                margin: { t: 40, r: 40, b: 40, l: 40 }
+            };
+
+            Plotly.newPlot('responsePlot', responseData, layout);
+        }
+
+        // Event listeners
+        kSlider.addEventListener('input', function() {
+            currentK = parseFloat(this.value);
+            kValueDisplay.textContent = currentK.toFixed(1);
+            updateDisplay();
+        });
+
+        // Inicialización
+        updateDisplay();
+    </script>
+</body>
+</html>

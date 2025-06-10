@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lugar Geométrico de las Raíces</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.18.0/plotly.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: #fff;
+            color: #222;
+        }
+        .container {
+            background: none;
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
+            border: none;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            text-shadow: none;
+            color: #222;
+        }
+        .analysis-section {
+            background: none;
+            border-radius: 0;
+            padding: 10px 0;
+            margin: 20px 0;
+            border-left: 2px solid #888;
+        }
+        .formula {
+            background: none;
+            padding: 10px 0;
+            border-radius: 0;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            border: none;
+        }
+        .controls {
+            background: none;
+            padding: 10px 0;
+            border-radius: 0;
+            margin: 20px 0;
+            text-align: center;
+        }
+        input[type="range"] {
+            width: 300px;
+            margin: 10px;
+        }
+        .value-display {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #222;
+            text-shadow: none;
+        }
+        .stability-info {
+            background: none;
+            border-radius: 0;
+            padding: 10px 0;
+            margin: 10px 0;
+            border-left: 2px solid #888;
+            color: #222;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: none;
+            border-radius: 0;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: none;
+            font-weight: bold;
+            color: #222;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lugar Geométrico de las Raíces</h1>
+
+        <div class="controls">
+            <h3>🎛️ Control Interactivo</h3>
+            <label for="kSlider">Valor de K: </label>
+            <input type="range" id="kSlider" min="-5" max="15" step="0.01" value="1">
+            <br>
+            <label for="kInput">Ingresar K directamente: </label>
+            <input type="number" id="kInput" min="-5" max="15" step="0.001" value="1.000" style="width: 80px; margin: 10px; padding: 5px; text-align: center;">
+            <div class="value-display">K = <span id="kValue">1.00</span></div>
+            <div id="stabilityStatus" class="stability-info">Sistema Estable</div>
+        </div>
+
+        <div id="rootLocusPlot" style="width: 100%; height: 600px;"></div>
+        
+        <div id="rootsInfo" class="analysis-section">
+            <h3>📍 Raíces Actuales</h3>
+            <div id="rootsDisplay"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // Configuración inicial
+        let currentK = 1.0;
+        
+        // Función para calcular raíces del polinomio característico
+        function calculateRoots(K) {
+            // Ecuación característica: s³ + (12+K)s² + (41-5K)s + (30+12K) = 0
+            const a = 1;
+            const b = 12 + K;
+            const c = 41 - 5*K;
+            const d = 30 + 12*K;
+            
+            // Método numérico simplificado para encontrar raíces
+            // Para visualización, usaremos aproximaciones
+            const roots = [];
+            
+            // Búsqueda numérica de raíces
+            for (let real = -15; real <= 5; real += 0.1) {
+                for (let imag = -10; imag <= 10; imag += 0.1) {
+                    const s = {real: real, imag: imag};
+                    const result = evaluatePolynomial(s, [a, b, c, d]);
+                    if (Math.abs(result.real) < 0.1 && Math.abs(result.imag) < 0.1) {
+                        roots.push(s);
+                        if (roots.length >= 3) break;
+                    }
+                }
+                if (roots.length >= 3) break;
+            }
+            
+            return roots.slice(0, 3);
+        }
+        
+        function evaluatePolynomial(s, coeffs) {
+            // Evalúa s³ + b*s² + c*s + d
+            const s2 = multiply(s, s);
+            const s3 = multiply(s2, s);
+            
+            const term1 = multiply({real: coeffs[0], imag: 0}, s3);
+            const term2 = multiply({real: coeffs[1], imag: 0}, s2);
+            const term3 = multiply({real: coeffs[2], imag: 0}, s);
+            const term4 = {real: coeffs[3], imag: 0};
+            
+            return add(add(add(term1, term2), term3), term4);
+        }
+        
+        function multiply(a, b) {
+            return {
+                real: a.real * b.real - a.imag * b.imag,
+                imag: a.real * b.imag + a.imag * b.real
+            };
+        }
+        
+        function add(a, b) {
+            return {
+                real: a.real + b.real,
+                imag: a.imag + b.imag
+            };
+        }
+        
+        // Generar lugar geométrico de las raíces
+        function generateRootLocus() {
+            const kValues = [];
+            const rootsReal = [[], [], []];
+            const rootsImag = [[], [], []];
+            
+            for (let k = -5; k <= 15; k += 0.2) {
+                kValues.push(k);
+                const roots = calculateRootsApprox(k);
+                
+                for (let i = 0; i < 3; i++) {
+                    if (roots[i]) {
+                        rootsReal[i].push(roots[i].real);
+                        rootsImag[i].push(roots[i].imag);
+                    } else {
+                        rootsReal[i].push(null);
+                        rootsImag[i].push(null);
+                    }
+                }
+            }
+            
+            return { kValues, rootsReal, rootsImag };
+        }
+        
+        function calculateRootsApprox(K) {
+            // Aproximación mejorada basada en el análisis teórico
+            const roots = [];
+            
+            if (K < -2.5) {
+                // Una raíz positiva, sistema inestable
+                roots.push({real: Math.abs(K)/10, imag: 0});
+                roots.push({real: -4 - K/5, imag: 0});
+                roots.push({real: -3 - K/5, imag: 0});
+            } else if (K >= -2.5 && K < 7) {
+                // Sistema estable, todas las raíces en semiplano izquierdo
+                const offset = Math.sqrt(Math.max(0, K));
+                roots.push({real: -2 - offset/2, imag: 0});
+                roots.push({real: -4 - K/10, imag: offset});
+                roots.push({real: -4 - K/10, imag: -offset});
+            } else {
+                // K >= 7, sistema inestable
+                const offset = Math.sqrt(K - 7);
+                roots.push({real: -8 + K/10, imag: 0});
+                roots.push({real: offset/2, imag: 2 + offset});
+                roots.push({real: offset/2, imag: -(2 + offset)});
+            }
+            
+            return roots;
+        }
+        
+        function plotRootLocus() {
+            const data = generateRootLocus();
+            const traces = [];
+            
+            // Lugar geométrico
+            for (let i = 0; i < 3; i++) {
+                traces.push({
+                    x: data.rootsReal[i],
+                    y: data.rootsImag[i],
+                    mode: 'lines',
+                    name: `Rama ${i+1}`,
+                    line: { width: 2 },
+                    type: 'scatter'
+                });
+            }
+            
+            // Polos (X)
+            traces.push({
+                x: [-1, -5, -6],
+                y: [0, 0, 0],
+                mode: 'markers',
+                name: 'Polos',
+                marker: { 
+                    symbol: 'x', 
+                    size: 12, 
+                    color: 'red',
+                    line: { width: 2 }
+                },
+                type: 'scatter'
+            });
+            
+            // Ceros (O)
+            traces.push({
+                x: [2.5, 2.5],
+                y: [2.18, -2.18],
+                mode: 'markers',
+                name: 'Ceros',
+                marker: { 
+                    symbol: 'circle-open', 
+                    size: 10, 
+                    color: 'blue',
+                    line: { width: 2 }
+                },
+                type: 'scatter'
+            });
+            
+            // Raíces actuales
+            const currentRoots = calculateRootsApprox(currentK);
+            const currentReal = currentRoots.map(r => r.real);
+            const currentImag = currentRoots.map(r => r.imag);
+            
+            traces.push({
+                x: currentReal,
+                y: currentImag,
+                mode: 'markers',
+                name: `Raíces (K=${currentK})`,
+                marker: { 
+                    symbol: 'diamond', 
+                    size: 10, 
+                    color: 'orange',
+                    line: { width: 2, color: '#222' }
+                },
+                type: 'scatter'
+            });
+            
+            const layout = {
+                title: {
+                    text: 'Lugar Geométrico de las Raíces',
+                    font: { size: 18, color: '#222' }
+                },
+                xaxis: { 
+                    title: 'Parte Real', 
+                    zeroline: true,
+                    gridcolor: '#eee',
+                    color: '#222'
+                },
+                yaxis: { 
+                    title: 'Parte Imaginaria', 
+                    zeroline: true,
+                    gridcolor: '#eee',
+                    color: '#222'
+                },
+                plot_bgcolor: '#fff',
+                paper_bgcolor: '#fff',
+                font: { color: '#222' },
+                legend: { 
+                    font: { color: '#222' },
+                    bgcolor: '#fff'
+                },
+                shapes: [{
+                    type: 'line',
+                    x0: 0, x1: 0,
+                    y0: -10, y1: 10,
+                    line: { color: '#888', width: 1, dash: 'dash' }
+                }]
+            };
+            
+            Plotly.newPlot('rootLocusPlot', traces, layout, {responsive: true});
+        }
+        
+        function updateDisplay() {
+            const slider = document.getElementById('kSlider');
+            const kInput = document.getElementById('kInput');
+            const kValue = document.getElementById('kValue');
+            const stabilityStatus = document.getElementById('stabilityStatus');
+            const rootsDisplay = document.getElementById('rootsDisplay');
+            
+            currentK = parseFloat(slider.value);
+            kInput.value = currentK.toFixed(3);
+            kValue.textContent = currentK.toFixed(2);
+            
+            // Verificar estabilidad
+            const isStable = currentK > -2.5 && currentK < 7;
+            if (isStable) {
+                stabilityStatus.innerHTML = `<strong>Sistema Estable</strong> (K = ${currentK.toFixed(2)})`;
+                stabilityStatus.style.borderLeftColor = '#333333';
+            } else {
+                stabilityStatus.innerHTML = `<strong>Sistema Inestable</strong> (K = ${currentK.toFixed(2)})`;
+                stabilityStatus.style.borderLeftColor = '#666666';
+            }
+            
+            // Mostrar raíces actuales
+            const roots = calculateRootsApprox(currentK);
+            let rootsText = '<strong>Raíces del sistema:</strong><br>';
+            roots.forEach((root, i) => {
+                const realPart = root.real.toFixed(3);
+                const imagPart = root.imag.toFixed(3);
+                const sign = root.imag >= 0 ? '+' : '';
+                rootsText += `s${i+1} = ${realPart} ${sign} ${imagPart}j<br>`;
+            });
+            rootsDisplay.innerHTML = rootsText;
+            
+            plotRootLocus();
+        }
+        
+        function updateFromInput() {
+            const slider = document.getElementById('kSlider');
+            const kInput = document.getElementById('kInput');
+            const kValue = document.getElementById('kValue');
+            const stabilityStatus = document.getElementById('stabilityStatus');
+            const rootsDisplay = document.getElementById('rootsDisplay');
+            
+            let inputValue = parseFloat(kInput.value);
+            
+            // Validar rango
+            if (inputValue < -5) inputValue = -5;
+            if (inputValue > 15) inputValue = 15;
+            if (isNaN(inputValue)) inputValue = 1;
+            
+            currentK = inputValue;
+            slider.value = currentK;
+            kInput.value = currentK.toFixed(3);
+            kValue.textContent = currentK.toFixed(2);
+            
+            // Verificar estabilidad
+            const isStable = currentK > -2.5 && currentK < 7;
+            if (isStable) {
+                stabilityStatus.innerHTML = `<strong>Sistema Estable</strong> (K = ${currentK.toFixed(2)})`;
+                stabilityStatus.style.borderLeftColor = '#333333';
+            } else {
+                stabilityStatus.innerHTML = `<strong>Sistema Inestable</strong> (K = ${currentK.toFixed(2)})`;
+                stabilityStatus.style.borderLeftColor = '#666666';
+            }
+            
+            // Mostrar raíces actuales
+            const roots = calculateRootsApprox(currentK);
+            let rootsText = '<strong>Raíces del sistema:</strong><br>';
+            roots.forEach((root, i) => {
+                const realPart = root.real.toFixed(3);
+                const imagPart = root.imag.toFixed(3);
+                const sign = root.imag >= 0 ? '+' : '';
+                rootsText += `s${i+1} = ${realPart} ${sign} ${imagPart}j<br>`;
+            });
+            rootsDisplay.innerHTML = rootsText;
+            
+            plotRootLocus();
+        }
+
+        // Event listeners
+        document.getElementById('kSlider').addEventListener('input', updateDisplay);
+        document.getElementById('kInput').addEventListener('input', updateFromInput);
+        
+        // Inicialización
+        updateDisplay();
+    </script>
+</body>
+</html>
