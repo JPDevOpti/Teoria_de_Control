@@ -133,7 +133,7 @@
         <div class="controls">
             <div class="control-group">
                 <label for="kGain">Ganancia K:</label>
-                <input type="range" id="kGain" min="0.1" max="10" step="0.1" value="1">
+                <input type="range" id="kGain" min="-20" max="20" step="0.1" value="1">
                 <span class="value-display" id="kValue">1.0</span>
             </div>
             <div class="control-group">
@@ -192,6 +192,19 @@
         function calculateSystemParameters(K) {
             // Sistema simplificado: s² + 2s + (1 + K) = 0
             // Comparando con s² + 2ζωn*s + ωn²
+            
+            // Para valores negativos de K que hagan (1 + K) <= 0, el sistema se vuelve inestable
+            if (1 + K <= 0) {
+                return { 
+                    wn: 0, 
+                    zeta: 0, 
+                    pole1: { real: 0, imag: 0 }, 
+                    pole2: { real: 0, imag: 0 }, 
+                    discriminant: 0,
+                    unstable: true 
+                };
+            }
+            
             const wn = Math.sqrt(1 + K);
             const zeta = 1 / wn;
             
@@ -214,12 +227,26 @@
                 pole2 = { real: -zeta * wn, imag: -wd };
             }
             
-            return { wn, zeta, pole1, pole2, discriminant };
+            return { wn, zeta, pole1, pole2, discriminant, unstable: false };
         }
 
         function updateDisplay() {
             const params = calculateSystemParameters(currentK);
-            const { wn, zeta, pole1, pole2, discriminant } = params;
+            const { wn, zeta, pole1, pole2, discriminant, unstable } = params;
+            
+            if (unstable) {
+                zetaDisplay.textContent = 'N/A';
+                wnDisplay.textContent = 'N/A';
+                dampingTypeDisplay.className = 'damping-type';
+                dampingTypeDisplay.textContent = '⚠️ SISTEMA INESTABLE (K < -1)';
+                polesDisplay.textContent = 'Sistema inestable';
+                settlingTimeDisplay.textContent = 'N/A';
+                
+                // Mostrar gráfico vacío o mensaje de inestabilidad
+                updatePolePlot(params);
+                updateResponsePlot(params);
+                return;
+            }
             
             // Actualizar valores numéricos
             zetaDisplay.textContent = zeta.toFixed(3);
@@ -254,10 +281,23 @@
         }
 
         function updatePolePlot(params) {
-            const { pole1, pole2, discriminant } = params;
+            const { pole1, pole2, discriminant, unstable } = params;
             
             let poleData;
-            if (discriminant >= 0) {
+            if (unstable) {
+                // Mostrar mensaje de inestabilidad
+                poleData = [{
+                    x: [0],
+                    y: [0],
+                    mode: 'markers+text',
+                    marker: { size: 0 },
+                    text: ['Sistema Inestable'],
+                    textposition: 'middle center',
+                    textfont: { size: 16, color: 'red' },
+                    name: 'Inestable',
+                    type: 'scatter'
+                }];
+            } else if (discriminant >= 0) {
                 // Polos reales
                 poleData = [{
                     x: [pole1, pole2],
@@ -309,7 +349,34 @@
         }
 
         function updateResponsePlot(params) {
-            const { wn, zeta } = params;
+            const { wn, zeta, unstable } = params;
+            
+            if (unstable) {
+                // Mostrar mensaje de inestabilidad
+                const responseData = [{
+                    x: [0, 1],
+                    y: [0, 0],
+                    mode: 'markers+text',
+                    marker: { size: 0 },
+                    text: ['Sistema Inestable - No se puede calcular respuesta'],
+                    textposition: 'middle center',
+                    textfont: { size: 14, color: 'red' },
+                    name: 'Inestable',
+                    type: 'scatter'
+                }];
+                
+                const layout = {
+                    title: 'Respuesta al Escalón Unitario',
+                    xaxis: { title: 'Tiempo (s)' },
+                    yaxis: { title: 'Amplitud', range: [0, 2] },
+                    showlegend: false,
+                    margin: { t: 40, r: 40, b: 40, l: 40 }
+                };
+                
+                Plotly.newPlot('responsePlot', responseData, layout);
+                return;
+            }
+            
             const t = Array.from({length: 200}, (_, i) => i * 0.05);
             let y;
 
